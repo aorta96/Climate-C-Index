@@ -645,11 +645,332 @@ else:
     ppi_aggregated = pd.DataFrame()
 
 # ============================================================================
+# ND-GAIN CLIMATE READINESS & VULNERABILITY
+# ============================================================================
+
+print("\n" + "=" * 80)
+print("SECTION 4: ND-GAIN CLIMATE READINESS & VULNERABILITY")
+print("=" * 80)
+
+# Look for ND-GAIN files
+ndgain_files = list(DATA_RAW.glob("*gain*.csv")) + list(DATA_RAW.glob("*GAIN*.csv")) + \
+               list(DATA_RAW.glob("*gain*.xlsx")) + list(DATA_RAW.glob("*GAIN*.xlsx"))
+
+if ndgain_files:
+    print(f"\nFound ND-GAIN file: {ndgain_files[0].name}")
+
+    try:
+        # Load file
+        if ndgain_files[0].suffix == '.csv':
+            ndgain_raw = pd.read_csv(ndgain_files[0])
+        else:
+            ndgain_raw = pd.read_excel(ndgain_files[0])
+
+        print(f"✓ ND-GAIN data loaded: {ndgain_raw.shape}")
+        print(f"  Columns: {', '.join(ndgain_raw.columns[:10])}")
+
+        # Detect columns
+        col_lower = {col.lower(): col for col in ndgain_raw.columns}
+
+        # Find key columns
+        country_col = None
+        for potential in ['country', 'name', 'iso3']:
+            if potential in col_lower:
+                country_col = col_lower[potential]
+                break
+
+        year_col = None
+        for potential in ['year']:
+            if potential in col_lower:
+                year_col = col_lower[potential]
+                break
+
+        # Find readiness and vulnerability columns
+        readiness_cols = [col for col in ndgain_raw.columns if 'readiness' in col.lower()]
+        vulnerability_cols = [col for col in ndgain_raw.columns if 'vulnerability' in col.lower()]
+
+        print(f"\n  Detected:")
+        print(f"    Country column: {country_col}")
+        print(f"    Year column: {year_col}")
+        print(f"    Readiness columns: {len(readiness_cols)}")
+        print(f"    Vulnerability columns: {len(vulnerability_cols)}")
+
+        if country_col and year_col:
+            # Filter for our countries and years
+            ndgain_filtered = ndgain_raw.copy()
+
+            # Map country names to codes
+            name_to_code = {v: k for k, v in all_countries.items()}
+
+            # Try to map countries
+            if country_col in ndgain_filtered.columns:
+                ndgain_filtered['country_code'] = ndgain_filtered[country_col].map(name_to_code)
+
+                # For ISO3 codes, try direct match
+                if ndgain_filtered['country_code'].isna().all():
+                    ndgain_filtered['country_code'] = ndgain_filtered[country_col]
+
+            # Filter for our countries
+            ndgain_filtered = ndgain_filtered[ndgain_filtered['country_code'].isin(country_codes)]
+
+            # Filter for our time period
+            if year_col in ndgain_filtered.columns:
+                ndgain_filtered['year'] = pd.to_numeric(ndgain_filtered[year_col], errors='coerce')
+                ndgain_filtered = ndgain_filtered[
+                    (ndgain_filtered['year'] >= START_YEAR) &
+                    (ndgain_filtered['year'] <= END_YEAR)
+                ]
+
+            # Select relevant columns
+            keep_cols = ['country_code', 'year'] + readiness_cols + vulnerability_cols
+            keep_cols = [col for col in keep_cols if col in ndgain_filtered.columns]
+
+            ndgain_data = ndgain_filtered[keep_cols].copy()
+
+            # Rename columns with NDGAIN prefix
+            rename_dict = {}
+            for col in ndgain_data.columns:
+                if col not in ['country_code', 'year']:
+                    rename_dict[col] = f'NDGAIN_{col}'
+            ndgain_data = ndgain_data.rename(columns=rename_dict)
+
+            print(f"✓ ND-GAIN data processed: {ndgain_data.shape}")
+            print(f"  Countries: {ndgain_data['country_code'].nunique()}")
+            print(f"  Years: {ndgain_data['year'].min():.0f}-{ndgain_data['year'].max():.0f}")
+        else:
+            print("⚠ Could not identify country or year columns")
+            ndgain_data = pd.DataFrame()
+
+    except Exception as e:
+        print(f"✗ Error processing ND-GAIN data: {e}")
+        ndgain_data = pd.DataFrame()
+else:
+    print("\n⚠ ND-GAIN data file not found")
+    print("  Looking for files matching: *gain*.csv, *GAIN*.csv, *gain*.xlsx, *GAIN*.xlsx")
+    print("  Please place ND-GAIN data in data/raw/")
+    print("  Download from: https://gain.nd.edu/our-work/country-index/download-data/")
+    ndgain_data = pd.DataFrame()
+
+# ============================================================================
+# WRI AQUEDUCT WATER RISK
+# ============================================================================
+
+print("\n" + "=" * 80)
+print("SECTION 5: WRI AQUEDUCT WATER RISK")
+print("=" * 80)
+
+# Look for Aqueduct files
+aqueduct_files = list(DATA_RAW.glob("*aqueduct*.csv")) + list(DATA_RAW.glob("*Aqueduct*.csv")) + \
+                 list(DATA_RAW.glob("*aqueduct*.xlsx")) + list(DATA_RAW.glob("*Aqueduct*.xlsx"))
+
+if aqueduct_files:
+    print(f"\nFound Aqueduct file: {aqueduct_files[0].name}")
+
+    try:
+        # Load file
+        if aqueduct_files[0].suffix == '.csv':
+            aqueduct_raw = pd.read_csv(aqueduct_files[0])
+        else:
+            aqueduct_raw = pd.read_excel(aqueduct_files[0])
+
+        print(f"✓ Aqueduct data loaded: {aqueduct_raw.shape}")
+        print(f"  Columns: {', '.join(aqueduct_raw.columns[:10])}")
+
+        # Detect columns
+        col_lower = {col.lower(): col for col in aqueduct_raw.columns}
+
+        # Find key columns
+        country_col = None
+        for potential in ['country', 'name_0', 'gid_0', 'iso3', 'country_name']:
+            if potential in col_lower:
+                country_col = col_lower[potential]
+                break
+
+        # Find water stress columns
+        water_cols = [col for col in aqueduct_raw.columns if any(keyword in col.lower()
+                      for keyword in ['water', 'stress', 'scarcity', 'baseline'])]
+
+        print(f"\n  Detected:")
+        print(f"    Country column: {country_col}")
+        print(f"    Water risk columns: {len(water_cols)}")
+        if water_cols:
+            print(f"    Sample columns: {', '.join(water_cols[:5])}")
+
+        if country_col and water_cols:
+            # Map country names to codes
+            name_to_code = {v: k for k, v in all_countries.items()}
+
+            aqueduct_filtered = aqueduct_raw.copy()
+
+            # Try to map countries
+            if country_col in aqueduct_filtered.columns:
+                aqueduct_filtered['country_code'] = aqueduct_filtered[country_col].map(name_to_code)
+
+                # For ISO3 codes, try direct match
+                if aqueduct_filtered['country_code'].isna().all():
+                    aqueduct_filtered['country_code'] = aqueduct_filtered[country_col]
+
+            # Filter for our countries
+            aqueduct_filtered = aqueduct_filtered[aqueduct_filtered['country_code'].isin(country_codes)]
+
+            # Aggregate by country (Aqueduct is typically not time-series)
+            keep_cols = ['country_code'] + water_cols
+            keep_cols = [col for col in keep_cols if col in aqueduct_filtered.columns]
+
+            # Take mean if multiple entries per country
+            aqueduct_data = aqueduct_filtered[keep_cols].groupby('country_code', as_index=False).mean(numeric_only=True)
+
+            # Rename columns with Aqueduct prefix
+            rename_dict = {}
+            for col in aqueduct_data.columns:
+                if col != 'country_code':
+                    rename_dict[col] = f'Aqueduct_{col}'
+            aqueduct_data = aqueduct_data.rename(columns=rename_dict)
+
+            print(f"✓ Aqueduct data processed: {aqueduct_data.shape}")
+            print(f"  Countries: {aqueduct_data['country_code'].nunique()}")
+        else:
+            print("⚠ Could not identify country or water risk columns")
+            aqueduct_data = pd.DataFrame()
+
+    except Exception as e:
+        print(f"✗ Error processing Aqueduct data: {e}")
+        aqueduct_data = pd.DataFrame()
+else:
+    print("\n⚠ WRI Aqueduct data file not found")
+    print("  Looking for files matching: *aqueduct*.csv, *Aqueduct*.csv, *aqueduct*.xlsx")
+    print("  Please place Aqueduct data in data/raw/")
+    print("  Download from: https://www.wri.org/aqueduct/data")
+    aqueduct_data = pd.DataFrame()
+
+# ============================================================================
+# CLIMATE BONDS INITIATIVE - GREEN FINANCE
+# ============================================================================
+
+print("\n" + "=" * 80)
+print("SECTION 6: CLIMATE BONDS INITIATIVE - GREEN FINANCE")
+print("=" * 80)
+
+# Look for Climate Bonds files
+cb_files = list(DATA_RAW.glob("*climate*bond*.csv")) + list(DATA_RAW.glob("*Climate*Bond*.csv")) + \
+           list(DATA_RAW.glob("*green*bond*.csv")) + list(DATA_RAW.glob("*Green*Bond*.csv")) + \
+           list(DATA_RAW.glob("*climate*bond*.xlsx")) + list(DATA_RAW.glob("*Climate*Bond*.xlsx"))
+
+if cb_files:
+    print(f"\nFound Climate Bonds file: {cb_files[0].name}")
+
+    try:
+        # Load file
+        if cb_files[0].suffix == '.csv':
+            cb_raw = pd.read_csv(cb_files[0])
+        else:
+            cb_raw = pd.read_excel(cb_files[0])
+
+        print(f"✓ Climate Bonds data loaded: {cb_raw.shape}")
+        print(f"  Columns: {', '.join(cb_raw.columns[:10])}")
+
+        # Detect columns
+        col_lower = {col.lower(): col for col in cb_raw.columns}
+
+        # Find key columns
+        country_col = None
+        for potential in ['country', 'countryname', 'issuer_country', 'nation']:
+            if potential in col_lower:
+                country_col = col_lower[potential]
+                break
+
+        year_col = None
+        for potential in ['year', 'issuance_year', 'date']:
+            if potential in col_lower:
+                year_col = col_lower[potential]
+                break
+
+        # Find amount/volume columns
+        amount_cols = [col for col in cb_raw.columns if any(keyword in col.lower()
+                       for keyword in ['amount', 'volume', 'size', 'issuance', 'value'])]
+
+        print(f"\n  Detected:")
+        print(f"    Country column: {country_col}")
+        print(f"    Year column: {year_col}")
+        print(f"    Amount columns: {len(amount_cols)}")
+        if amount_cols:
+            print(f"    Sample columns: {', '.join(amount_cols[:3])}")
+
+        if country_col and year_col:
+            # Map country names to codes
+            name_to_code = {v: k for k, v in all_countries.items()}
+
+            cb_filtered = cb_raw.copy()
+
+            # Try to map countries
+            if country_col in cb_filtered.columns:
+                cb_filtered['country_code'] = cb_filtered[country_col].map(name_to_code)
+
+                # For ISO3 codes, try direct match
+                if cb_filtered['country_code'].isna().all():
+                    cb_filtered['country_code'] = cb_filtered[country_col]
+
+            # Extract year if date column
+            if year_col in cb_filtered.columns:
+                if cb_filtered[year_col].dtype == 'object':
+                    cb_filtered['year'] = pd.to_datetime(cb_filtered[year_col], errors='coerce').dt.year
+                else:
+                    cb_filtered['year'] = pd.to_numeric(cb_filtered[year_col], errors='coerce')
+
+            # Filter for our countries and years
+            cb_filtered = cb_filtered[cb_filtered['country_code'].isin(country_codes)]
+            cb_filtered = cb_filtered[
+                (cb_filtered['year'] >= START_YEAR) &
+                (cb_filtered['year'] <= END_YEAR)
+            ]
+
+            # Aggregate by country-year
+            if amount_cols:
+                # Use first amount column found
+                amount_col = amount_cols[0]
+
+                cb_aggregated = cb_filtered.groupby(['country_code', 'year'], as_index=False).agg({
+                    amount_col: 'sum',
+                    country_col: 'count'  # Count of bonds
+                })
+
+                cb_aggregated = cb_aggregated.rename(columns={
+                    amount_col: 'Green_Bond_Issuance_USD',
+                    country_col: 'Green_Bond_Count'
+                })
+
+                # Log transformation
+                cb_aggregated['Green_Bond_Issuance_Log'] = np.log1p(cb_aggregated['Green_Bond_Issuance_USD'])
+
+                print(f"✓ Climate Bonds data processed: {cb_aggregated.shape}")
+                print(f"  Countries: {cb_aggregated['country_code'].nunique()}")
+                print(f"  Years: {cb_aggregated['year'].min():.0f}-{cb_aggregated['year'].max():.0f}")
+                print(f"  Total issuance: ${cb_aggregated['Green_Bond_Issuance_USD'].sum():,.0f}")
+
+                cb_data = cb_aggregated
+            else:
+                print("⚠ Could not identify amount columns")
+                cb_data = pd.DataFrame()
+        else:
+            print("⚠ Could not identify country or year columns")
+            cb_data = pd.DataFrame()
+
+    except Exception as e:
+        print(f"✗ Error processing Climate Bonds data: {e}")
+        cb_data = pd.DataFrame()
+else:
+    print("\n⚠ Climate Bonds data file not found")
+    print("  Looking for files matching: *climate*bond*.csv, *green*bond*.csv")
+    print("  Please place Climate Bonds data in data/raw/")
+    print("  Contact: https://www.climatebonds.net/")
+    cb_data = pd.DataFrame()
+
+# ============================================================================
 # MERGE ALL DATASETS
 # ============================================================================
 
 print("\n" + "=" * 80)
-print("SECTION 4: MERGING ALL DATASETS")
+print("SECTION 7: MERGING ALL DATASETS")
 print("=" * 80)
 
 # Create country code mapping
@@ -690,6 +1011,36 @@ if not ppi_aggregated.empty:
     )
     print(f"After PPI merge: {data.shape}")
 
+# Merge ND-GAIN
+if 'ndgain_data' in locals() and not ndgain_data.empty:
+    data = pd.merge(
+        data,
+        ndgain_data,
+        on=['country_code', 'year'],
+        how='left'
+    )
+    print(f"After ND-GAIN merge: {data.shape}")
+
+# Merge Aqueduct (country-level only, will be duplicated across years)
+if 'aqueduct_data' in locals() and not aqueduct_data.empty:
+    data = pd.merge(
+        data,
+        aqueduct_data,
+        on=['country_code'],
+        how='left'
+    )
+    print(f"After Aqueduct merge: {data.shape}")
+
+# Merge Climate Bonds
+if 'cb_data' in locals() and not cb_data.empty:
+    data = pd.merge(
+        data,
+        cb_data,
+        on=['country_code', 'year'],
+        how='left'
+    )
+    print(f"After Climate Bonds merge: {data.shape}")
+
 # Add tier information
 def assign_tier(country_code):
     for name, code in tier_1.items():
@@ -723,7 +1074,7 @@ print(f"\n✓ Final merged dataset: {data.shape}")
 # ============================================================================
 
 print("\n" + "=" * 80)
-print("SECTION 5: CONSTRUCTING DERIVED VARIABLES")
+print("SECTION 8: CONSTRUCTING DERIVED VARIABLES")
 print("=" * 80)
 
 # Climate C Index Components
@@ -801,7 +1152,7 @@ print("\n✓ Derived variables constructed")
 # ============================================================================
 
 print("\n" + "=" * 80)
-print("SECTION 6: DATA QUALITY REPORT")
+print("SECTION 9: DATA QUALITY REPORT")
 print("=" * 80)
 
 print(f"\nFinal Dataset Summary:")
@@ -811,9 +1162,13 @@ print(f"  Years: {data['year'].min()}-{data['year'].max()}")
 print(f"  Total variables: {len(data.columns)}")
 
 # Count variables by source
-wb_vars = [col for col in data.columns if not col.startswith('Ember_') and not col.startswith('PPI_')]
+prefixes_to_exclude = ['Ember_', 'PPI_', 'NDGAIN_', 'Aqueduct_', 'Green_Bond']
+wb_vars = [col for col in data.columns if not any(col.startswith(prefix) for prefix in prefixes_to_exclude)]
 ember_vars = [col for col in data.columns if col.startswith('Ember_')]
 ppi_vars = [col for col in data.columns if col.startswith('PPI_')]
+ndgain_vars = [col for col in data.columns if col.startswith('NDGAIN_')]
+aqueduct_vars = [col for col in data.columns if col.startswith('Aqueduct_')]
+greenbond_vars = [col for col in data.columns if col.startswith('Green_Bond')]
 derived_vars = ['Energy_Score', 'Governance_Index', 'Digital_Demand_Index', 'Trade_Openness'] + \
                [col for col in data.columns if col.endswith('_Log') or col.endswith('_norm')]
 
@@ -821,6 +1176,9 @@ print(f"\nVariables by source:")
 print(f"  World Bank (WDI + WGI): {len(wb_vars)}")
 print(f"  Ember Energy: {len(ember_vars)}")
 print(f"  PPI (ICT Infrastructure): {len(ppi_vars)}")
+print(f"  ND-GAIN (Climate Readiness): {len(ndgain_vars)}")
+print(f"  WRI Aqueduct (Water Risk): {len(aqueduct_vars)}")
+print(f"  Climate Bonds (Green Finance): {len(greenbond_vars)}")
 print(f"  Derived variables: {len([v for v in derived_vars if v in data.columns])}")
 
 # Missing data analysis
@@ -850,7 +1208,7 @@ print(coverage.to_string())
 # ============================================================================
 
 print("\n" + "=" * 80)
-print("SECTION 7: SAVING DATASETS")
+print("SECTION 10: SAVING DATASETS")
 print("=" * 80)
 
 # Save full dataset
@@ -927,20 +1285,29 @@ Files created:
 4. {summary_file.name}
    - Summary statistics for all variables
 
+Data sources included:
+✓ World Bank WDI: Economic, energy, and infrastructure indicators
+✓ World Bank WGI: Governance quality metrics
+✓ Ember Energy: Electricity generation and carbon intensity
+✓ World Bank PPI: ICT/digital infrastructure investments
+""" + ("✓ ND-GAIN: Climate readiness and vulnerability\n" if 'ndgain_data' in locals() and not ndgain_data.empty else "○ ND-GAIN: Not found (add to data/raw/ for climate readiness scores)\n") + \
+("✓ WRI Aqueduct: Water risk and stress indicators\n" if 'aqueduct_data' in locals() and not aqueduct_data.empty else "○ WRI Aqueduct: Not found (add to data/raw/ for water risk data)\n") + \
+("✓ Climate Bonds: Green finance issuance data\n" if 'cb_data' in locals() and not cb_data.empty else "○ Climate Bonds: Not found (add to data/raw/ for green finance data)\n") + f"""
+Key variables for your analysis:
+- DV: PPI_ICT_Investment_Log (digital infrastructure investment)
+- Climate C components:
+  * Energy_Score, Renewable_electricity_output_pct_total
+  * NDGAIN_Readiness (if available)
+  * Aqueduct_* water stress indicators (if available)
+  * Green_Bond_Issuance_USD (green finance, if available)
+- Controls: Governance_Index, GDP_Log, Digital_Demand_Index
+- Environmental intensity: Ember_Intensity_* and Ember_Emissions_* variables
+
 Next steps:
 1. Review the data dictionary to understand all variables
 2. Check missing data patterns in your key variables
-3. Consider additional data sources for:
-   - ND-GAIN climate vulnerability/readiness scores
-   - WRI Aqueduct water risk indicators
-   - Climate Bonds Initiative green finance data
-   - National carbon pricing policies
-
-Key variables for your analysis:
-- DV: PPI_ICT_Investment_Log (digital infrastructure investment)
-- Climate C components: Energy_Score, Renewable_electricity_output_pct_total
-- Controls: Governance_Index, GDP_Log, Digital_Demand_Index
-- Environmental intensity: Ember_Intensity_* and Ember_Emissions_* variables
+3. If any data sources are missing, add them to data/raw/ and re-run
+4. Construct your full Climate C Index from available components
 
 """)
 
