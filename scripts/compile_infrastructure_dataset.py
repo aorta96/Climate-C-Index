@@ -426,57 +426,180 @@ if ppi_file.exists():
     ppi_raw = pd.read_stata(ppi_file)
     print(f"✓ PPI data loaded: {ppi_raw.shape}")
 
-    # Filter for ICT/Telecom sector and our countries
-    ict_sectors = ['Telecom', 'ICT', 'Information and Communication Technology']
+    # Display all column names for debugging
+    print(f"\nPPI columns available ({len(ppi_raw.columns)}):")
+    print(", ".join(ppi_raw.columns[:20]))  # Show first 20 columns
+    if len(ppi_raw.columns) > 20:
+        print(f"  ... and {len(ppi_raw.columns) - 20} more")
 
-    # Display available sectors
-    if 'Sector' in ppi_raw.columns:
-        print(f"\nAvailable sectors: {ppi_raw['Sector'].unique()}")
+    # Detect column names (case-insensitive)
+    col_lower = {col.lower(): col for col in ppi_raw.columns}
 
-    # Filter PPI data
-    ppi_filtered = ppi_raw[
-        (ppi_raw['Country'].isin(list(all_countries.keys())) |
-         ppi_raw.get('CountryCode', pd.Series()).isin(country_codes))
-    ].copy()
+    # Find country column
+    country_col = None
+    for potential in ['country', 'countryname', 'economy', 'economyname']:
+        if potential in col_lower:
+            country_col = col_lower[potential]
+            break
 
-    # Map country names to codes
+    # Find country code column
+    code_col = None
+    for potential in ['countrycode', 'economycode', 'iso3', 'countryiso3']:
+        if potential in col_lower:
+            code_col = col_lower[potential]
+            break
+
+    # Find sector column
+    sector_col = None
+    for potential in ['sector', 'sectormain', 'primarysector']:
+        if potential in col_lower:
+            sector_col = col_lower[potential]
+            break
+
+    # Find year column
+    year_col = None
+    for potential in ['year', 'financialclosureyear', 'closureyear']:
+        if potential in col_lower:
+            year_col = col_lower[potential]
+            break
+
+    # Find date column if no year
+    date_col = None
+    if not year_col:
+        for potential in ['financialclosuredate', 'closuredate', 'date']:
+            if potential in col_lower:
+                date_col = col_lower[potential]
+                break
+
+    # Find investment column
+    investment_col = None
+    for potential in ['totalinvestment', 'investment', 'totalcommitment', 'commitmentamount']:
+        if potential in col_lower:
+            investment_col = col_lower[potential]
+            break
+
+    # Find project ID column
+    project_col = None
+    for potential in ['projectid', 'id', 'project_id']:
+        if potential in col_lower:
+            project_col = col_lower[potential]
+            break
+
+    print(f"\nDetected columns:")
+    print(f"  Country: {country_col}")
+    print(f"  Country Code: {code_col}")
+    print(f"  Sector: {sector_col}")
+    print(f"  Year: {year_col if year_col else (date_col + ' (will extract year)' if date_col else 'NOT FOUND')}")
+    print(f"  Investment: {investment_col}")
+    print(f"  Project ID: {project_col}")
+
+    # Display available sectors if sector column found
+    if sector_col and sector_col in ppi_raw.columns:
+        unique_sectors = ppi_raw[sector_col].unique()
+        print(f"\nAvailable sectors ({len(unique_sectors)}):")
+        for sector in sorted(unique_sectors):
+            count = (ppi_raw[sector_col] == sector).sum()
+            print(f"  - {sector}: {count} projects")
+
+    # Filter for ICT/Telecom sector
+    if sector_col:
+        ict_keywords = ['telecom', 'ict', 'information', 'communication', 'technology', 'digital']
+        sector_mask = ppi_raw[sector_col].str.lower().str.contains('|'.join(ict_keywords), na=False)
+        ppi_filtered = ppi_raw[sector_mask].copy()
+        print(f"\n✓ Filtered for ICT/Telecom sector: {len(ppi_filtered)} projects")
+    else:
+        print("\n⚠ Warning: Could not identify sector column, using all sectors")
+        ppi_filtered = ppi_raw.copy()
+
+    # Filter for our countries
+    if country_col and code_col:
+        # Try both country name and code
+        country_mask = (
+            ppi_filtered[country_col].isin(list(all_countries.keys())) |
+            ppi_filtered[code_col].isin(country_codes)
+        )
+        ppi_filtered = ppi_filtered[country_mask]
+    elif country_col:
+        ppi_filtered = ppi_filtered[ppi_filtered[country_col].isin(list(all_countries.keys()))]
+    elif code_col:
+        ppi_filtered = ppi_filtered[ppi_filtered[code_col].isin(country_codes)]
+    else:
+        print("⚠ Warning: Could not identify country columns")
+
+    print(f"✓ Filtered for target countries: {len(ppi_filtered)} projects")
+
+    # Map to country codes
     name_to_code = {v: k for k, v in all_countries.items()}
-    if 'Country' in ppi_filtered.columns:
-        ppi_filtered['country_code'] = ppi_filtered['Country'].map(name_to_code)
+    if code_col and code_col in ppi_filtered.columns:
+        ppi_filtered['country_code'] = ppi_filtered[code_col]
+    elif country_col and country_col in ppi_filtered.columns:
+        ppi_filtered['country_code'] = ppi_filtered[country_col].map(name_to_code)
 
     # Extract year
-    if 'Year' in ppi_filtered.columns:
-        ppi_filtered['year'] = ppi_filtered['Year']
-    elif 'FinancialClosureDate' in ppi_filtered.columns:
-        ppi_filtered['year'] = pd.to_datetime(ppi_filtered['FinancialClosureDate'], errors='coerce').dt.year
+    if year_col and year_col in ppi_filtered.columns:
+        ppi_filtered['year'] = ppi_filtered[year_col]
+    elif date_col and date_col in ppi_filtered.columns:
+        ppi_filtered['year'] = pd.to_datetime(ppi_filtered[date_col], errors='coerce').dt.year
 
     # Filter for our time period
-    ppi_filtered = ppi_filtered[
-        (ppi_filtered['year'] >= START_YEAR) &
-        (ppi_filtered['year'] <= END_YEAR)
-    ]
+    if 'year' in ppi_filtered.columns:
+        ppi_filtered = ppi_filtered[
+            (ppi_filtered['year'] >= START_YEAR) &
+            (ppi_filtered['year'] <= END_YEAR)
+        ]
+        print(f"✓ Filtered for {START_YEAR}-{END_YEAR}: {len(ppi_filtered)} projects")
 
     # Aggregate by country-year
-    if 'TotalInvestment' in ppi_filtered.columns:
-        ppi_aggregated = ppi_filtered.groupby(['country_code', 'year'], as_index=False).agg({
-            'TotalInvestment': 'sum',
-            'ProjectID': 'count'
-        }).rename(columns={
-            'TotalInvestment': 'PPI_ICT_Investment_USD',
-            'ProjectID': 'PPI_ICT_Project_Count'
-        })
+    if 'country_code' in ppi_filtered.columns and 'year' in ppi_filtered.columns:
+        # Prepare aggregation
+        agg_dict = {}
+
+        if investment_col and investment_col in ppi_filtered.columns:
+            agg_dict[investment_col] = 'sum'
+
+        if project_col and project_col in ppi_filtered.columns:
+            agg_dict[project_col] = 'count'
+        elif len(ppi_filtered) > 0:
+            # Use any column for counting if project_col not found
+            agg_dict[ppi_filtered.columns[0]] = 'count'
+
+        if agg_dict:
+            ppi_aggregated = ppi_filtered.groupby(['country_code', 'year'], as_index=False).agg(agg_dict)
+
+            # Rename columns
+            if investment_col and investment_col in agg_dict:
+                ppi_aggregated = ppi_aggregated.rename(columns={investment_col: 'PPI_ICT_Investment_USD'})
+
+            if project_col and project_col in agg_dict:
+                ppi_aggregated = ppi_aggregated.rename(columns={project_col: 'PPI_ICT_Project_Count'})
+            else:
+                # Rename the count column
+                count_col = [col for col in ppi_aggregated.columns if col not in ['country_code', 'year', 'PPI_ICT_Investment_USD']]
+                if count_col:
+                    ppi_aggregated = ppi_aggregated.rename(columns={count_col[0]: 'PPI_ICT_Project_Count'})
+
+            # Log transformation of investment
+            if 'PPI_ICT_Investment_USD' in ppi_aggregated.columns:
+                ppi_aggregated['PPI_ICT_Investment_Log'] = np.log1p(ppi_aggregated['PPI_ICT_Investment_USD'])
+
+            print(f"\n✓ PPI data aggregated: {ppi_aggregated.shape}")
+            print(f"  Countries: {ppi_aggregated['country_code'].nunique()}")
+            print(f"  Years: {ppi_aggregated['year'].min():.0f}-{ppi_aggregated['year'].max():.0f}")
+
+            if 'PPI_ICT_Investment_USD' in ppi_aggregated.columns:
+                total_investment = ppi_aggregated['PPI_ICT_Investment_USD'].sum()
+                print(f"  Total ICT Investment: ${total_investment:,.0f}")
+                print(f"  Mean annual investment: ${ppi_aggregated['PPI_ICT_Investment_USD'].mean():,.0f}")
+
+            if 'PPI_ICT_Project_Count' in ppi_aggregated.columns:
+                total_projects = ppi_aggregated['PPI_ICT_Project_Count'].sum()
+                print(f"  Total projects: {total_projects:.0f}")
+        else:
+            print("⚠ Warning: Could not create aggregations")
+            ppi_aggregated = pd.DataFrame()
     else:
-        ppi_aggregated = ppi_filtered.groupby(['country_code', 'year'], as_index=False).size().rename(
-            columns={'size': 'PPI_ICT_Project_Count'}
-        )
-
-    # Log transformation of investment
-    if 'PPI_ICT_Investment_USD' in ppi_aggregated.columns:
-        ppi_aggregated['PPI_ICT_Investment_Log'] = np.log1p(ppi_aggregated['PPI_ICT_Investment_USD'])
-
-    print(f"✓ PPI data processed: {ppi_aggregated.shape}")
-    print(f"  Countries: {ppi_aggregated['country_code'].nunique()}")
-    print(f"  Years: {ppi_aggregated['year'].min()}-{ppi_aggregated['year'].max()}")
+        print("⚠ Warning: Missing country_code or year columns")
+        ppi_aggregated = pd.DataFrame()
 
 else:
     print(f"⚠ PPI data file not found at {ppi_file}")
