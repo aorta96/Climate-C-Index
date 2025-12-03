@@ -458,7 +458,7 @@ if ppi_file.exists():
 
     # Find year column
     year_col = None
-    for potential in ['year', 'financialclosureyear', 'closureyear']:
+    for potential in ['year', 'financialclosureyear', 'closureyear', 'fcy']:
         if potential in col_lower:
             year_col = col_lower[potential]
             break
@@ -480,7 +480,7 @@ if ppi_file.exists():
 
     # Find project ID column
     project_col = None
-    for potential in ['projectid', 'id', 'project_id']:
+    for potential in ['projectid', 'id', 'project_id', 'iy']:
         if potential in col_lower:
             project_col = col_lower[potential]
             break
@@ -503,10 +503,19 @@ if ppi_file.exists():
 
     # Filter for ICT/Telecom sector
     if sector_col:
-        ict_keywords = ['telecom', 'ict', 'information', 'communication', 'technology', 'digital']
-        sector_mask = ppi_raw[sector_col].str.lower().str.contains('|'.join(ict_keywords), na=False)
-        ppi_filtered = ppi_raw[sector_mask].copy()
-        print(f"\n✓ Filtered for ICT/Telecom sector: {len(ppi_filtered)} projects")
+        # Try exact match first (faster)
+        ict_exact_matches = ['ICT', 'Telecom', 'Information and Communication Technology']
+        exact_match = ppi_raw[sector_col].isin(ict_exact_matches)
+
+        if exact_match.any():
+            ppi_filtered = ppi_raw[exact_match].copy()
+            print(f"\n✓ Filtered for ICT/Telecom sector: {len(ppi_filtered)} projects")
+        else:
+            # Fall back to keyword matching
+            ict_keywords = ['telecom', 'ict', 'information', 'communication', 'technology', 'digital']
+            sector_mask = ppi_raw[sector_col].str.lower().str.contains('|'.join(ict_keywords), na=False)
+            ppi_filtered = ppi_raw[sector_mask].copy()
+            print(f"\n✓ Filtered for ICT/Telecom sector (keyword match): {len(ppi_filtered)} projects")
     else:
         print("\n⚠ Warning: Could not identify sector column, using all sectors")
         ppi_filtered = ppi_raw.copy()
@@ -530,10 +539,38 @@ if ppi_file.exists():
 
     # Map to country codes
     name_to_code = {v: k for k, v in all_countries.items()}
+
+    # Add alternative country name mappings for PPI database
+    ppi_name_mapping = {
+        'Turkiye': 'Turkey',
+        'Türkiye': 'Turkey',
+        'Turkey': 'Turkey',
+        'Egypt, Arab Rep.': 'Egypt, Arab Rep.',
+        'Egypt': 'Egypt, Arab Rep.',
+        'Iran, Islamic Rep.': 'Iran, Islamic Rep.',
+        'Iran': 'Iran, Islamic Rep.',
+        'Venezuela, RB': 'Venezuela, RB',
+        'Venezuela': 'Venezuela, RB',
+        'Kyrgyz Republic': 'Kyrgyz Republic',
+        'Kyrgyzstan': 'Kyrgyz Republic',
+        'Lao PDR': 'Lao PDR',
+        'Laos': 'Lao PDR',
+    }
+
     if code_col and code_col in ppi_filtered.columns:
         ppi_filtered['country_code'] = ppi_filtered[code_col]
     elif country_col and country_col in ppi_filtered.columns:
-        ppi_filtered['country_code'] = ppi_filtered[country_col].map(name_to_code)
+        # First normalize PPI country names
+        ppi_filtered['country_normalized'] = ppi_filtered[country_col].map(
+            lambda x: ppi_name_mapping.get(x, x) if pd.notna(x) else x
+        )
+        # Then map to codes
+        ppi_filtered['country_code'] = ppi_filtered['country_normalized'].map(name_to_code)
+
+        # For any unmapped, try direct mapping
+        missing_mask = ppi_filtered['country_code'].isna()
+        if missing_mask.any():
+            ppi_filtered.loc[missing_mask, 'country_code'] = ppi_filtered.loc[missing_mask, country_col].map(name_to_code)
 
     # Extract year
     if year_col and year_col in ppi_filtered.columns:
