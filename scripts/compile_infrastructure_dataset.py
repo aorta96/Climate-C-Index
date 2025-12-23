@@ -752,7 +752,7 @@ print("DATASET COMPILATION COMPLETE!")
 print("=" * 80)
 
 print(f"""
-Your infrastructure investment dataset is ready!
+The infrastructure investment dataset is ready!
 
 Files created:
 1. {output_file.name}
@@ -769,14 +769,14 @@ Files created:
 
 Next steps:
 1. Review the data dictionary to understand all variables
-2. Check missing data patterns in your key variables
+2. Check missing data patterns in the key variables
 3. Consider additional data sources for:
    - ND-GAIN climate vulnerability/readiness scores
    - WRI Aqueduct water risk indicators
    - Climate Bonds Initiative green finance data
    - National carbon pricing policies
 
-Key variables for your analysis:
+Key variables for the analysis:
 - DV: PPI_ICT_Investment_Log (digital infrastructure investment)
 - Climate C components: Energy_Score, Renewable_electricity_output_pct_total
 - Controls: Governance_Index, GDP_Log, Digital_Demand_Index
