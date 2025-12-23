@@ -191,7 +191,7 @@ if 'PPI_ICT_Investment_USD' in data.columns:
 
 else:
     print("\n⚠ WARNING: PPI investment data not found")
-    print("  This is your primary dependent variable!")
+    print("  This is the primary dependent variable!")
     print("  Check that the PPI file was in data/raw/")
 
 # ============================================================================
@@ -352,7 +352,7 @@ if len(issues) == 0 and len(warnings) == 0:
     print("\n" + "=" * 80)
     print("✓✓✓ DATASET VALIDATION PASSED ✓✓✓")
     print("=" * 80)
-    print("\nYour dataset is ready for analysis!")
+    print("\nThe dataset is ready for analysis!")
     print(f"Main file: {data_file}")
 else:
     print("\n" + "=" * 80)
