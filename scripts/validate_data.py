@@ -2,7 +2,7 @@
 Data Validation Script
 ======================
 
-Run this script after compiling your dataset to validate:
+Run this script after compiling the dataset to validate:
 - Data completeness
 - Variable coverage
 - Missing data patterns
