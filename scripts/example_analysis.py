@@ -2,7 +2,7 @@
 Example Analysis Script
 =======================
 
-This script demonstrates how to use your compiled infrastructure dataset
+This script demonstrates how to use the compiled infrastructure dataset
 for panel regression analysis.
 
 It includes:
