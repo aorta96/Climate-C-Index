@@ -11,7 +11,7 @@ Data Sources:
 3. Ember Energy - Electricity generation, emissions, and carbon intensity
 4. World Bank PPI - Private Participation in Infrastructure (ICT/digital sector)
 
-Author: Climate C-Index Research Team
+Author: Alexander Orta
 Date: 2025-12-03
 """
 
