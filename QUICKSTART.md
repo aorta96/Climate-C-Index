@@ -7,9 +7,8 @@
 pip install -r requirements.txt
 ```
 
-### Step 2: Get Your PPI Data
-1. You mentioned you already have the PPI data file
-2. Copy it to: `data/raw/Public_Participation_in_Infrastructure-2023-H1-Stata.dta`
+### Step 2: Get PPI Data
+1. Copy it to: `data/raw/Public_Participation_in_Infrastructure-2023-H1-Stata.dta`
 
 ### Step 3: Run the Compilation Script
 ```bash
